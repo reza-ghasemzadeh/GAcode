@@ -30,7 +30,7 @@ def set_params(individual, sim):
 #         for attr in result_attr:
 #             writer.writerow(attr)
     return 0
-
+#HELLO_WORLD
 if __name__ == '__main__':
     call_type = argv[1]
     if call_type == 'init':

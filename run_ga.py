@@ -21,7 +21,7 @@ sys.path.append('C:\\Program Files\\Aimsun\\Aimsun Next 20')
 
 # configure logger
 # define log filename
-LOG_FILENAME = 'C:\\Aimsun Projects\\REZA_GA\\calibration.out'                             #Directory changed
+LOG_FILENAME = 'C:\\Aimsun Projects\\REZA_GA\\calibration.log'                             #Directory changed
 logger = logging.getLogger("my logger")
 logger.setLevel(logging.DEBUG)
 # format for our loglines
@@ -135,6 +135,7 @@ def get_sim_data(tables):
     sim_data = tables['MEDETECT']
     # take aggregated vehicle type data, and non-aggregated interval
     sim_data = sim_data[(sim_data['sid']==0)&(sim_data['ent']!=0)]
+    sim_data.to_csv('simData.csv')
     return sim_data
 
 def join_obs_sim(obs_data, sim_data):
@@ -147,15 +148,15 @@ def join_obs_sim(obs_data, sim_data):
     sim_data.rename(columns={'flow': 'flow_sim', 'speed': 'speed_sim'}, inplace=True)
     # join tables
     joined_data = obs_data.merge(sim_data, how='inner', on=['eid', 'ent'])
-
+    joined_data.to_csv('JoinedData.csv')
     return joined_data
 
 aimsun_exe = 'C:\\Program Files\\Aimsun\\Aimsun Next 20\\aconsole.exe'
 # define paths
-data_path = 'C:\\Users\\RezaGS\\Desktop\\Final Edition\\Testing\\Testing\\Outputs Tutorial\\Model\\Resources\\Outputs\\'
+data_path = 'C:\\Users\\RezaGS\\Desktop\\FinalEdition5Feb\\Testing\\Testing\\Outputs Tutorial\\Model\\Resources\\Outputs\\'
 db_file = data_path + 'results_aimsun.sqlite'
 obs_data_file = data_path + 'ObsDataSynthesized.csv'  #obs file replaced
-aimsun_file = 'C:\\Users\\RezaGS\\Desktop\\Final Edition\\Testing\\Testing\\Outputs Tutorial\\Model\\Final_Outputs_new.ang'
+aimsun_file = 'C:\\Users\\RezaGS\\Desktop\\FinalEdition5Feb\\Testing\\Testing\\Outputs Tutorial\\Model\\Final_Outputs_new.ang'
 rep_id = 3194
 
 # initialize simulation model
@@ -166,31 +167,30 @@ tables = to_dict(db_file)
 
 # get simulation info
 sim_info = tables['SIM_INFO']
+#print(sim_info)
 
 # get observed data
 obs_data = pd.read_csv(obs_data_file)  #double 'obs_data =' removed
 
 # get simulated data
 sim_data = get_sim_data(tables)
+#print(sim_data)
 
 # re index obeserved data to match indexing of simulated data
 obs_data = reindex_obs_data(obs_data, sim_info)
+
 # remove observed data with zero flows
 obs_data = obs_data[obs_data['flow'] > 0]
+#print(obs_data)
 
 # join sim and obs data
 joined_data = join_obs_sim(obs_data, sim_data)
+#print(joined_data)
+
+joined_data.to_csv("GlobalJoinedData.csv")
 # establish actual flows and speeds for error calculations
 flows_actual = joined_data['flow_obs']
 speeds_actual = joined_data['speed_obs']
-
-#in AIMSUN help the formula is different: the RMSE is based on the percentage error: RMSE=sqrt( 1/N * sum[((sim-obs)/obs)**2] )
-def mean_squared_error(y_true, y_pred, squared=True):
-    MSE = np.square(np.subtract(y_true,y_pred)).mean()
-    if squared:
-        return MSE
-    else:
-        return math.sqrt(MSE)
 
 def to_csv(db_file):
     '''
@@ -207,60 +207,6 @@ def to_csv(db_file):
         table.to_csv(export_path + '/' + table_name + '.csv', index_label='index')
     cursor.close()
     db.close()
-
-# Evaluation function
-def mean_geh(y_true, y_pred):
-    geh_vector = np.sqrt( (2*(y_pred - y_true)**2) / (y_true + y_pred) )
-    return np.mean(geh_vector)
-
-def simulate(individual, ang_file, db_file):
-    # convert individual to string so it can be passed as a command line argument
-    string_individual = [str(x) for x in individual]
-    run_aimsun_command(['evaluate', ang_file, str(rep_id), db_file] + string_individual)
-    # create dictionary of db tables
-    tables = to_dict(db_file)
-    # get new simulated results
-    sim_data = get_sim_data(tables)
-
-    # join sim and obs data
-    joined_data = join_obs_sim(obs_data, sim_data)
-
-    # get simulation flow and speed values
-    flows_simulated = joined_data['flow_sim']
-    speeds_simulated = joined_data['speed_sim']
-
-    return flows_simulated, speeds_simulated
-
-def eval(individual):
-    #print('Evaluating individual...')
-    # create a temporary copy of the ang file to evaluate in parallel
-    temp_ang, temp_db = make_temp_sim()
-    # run the simulation
-    flows_simulated, speeds_simulated = simulate(individual, temp_ang, temp_db)
-    # remove temporary files
-    #os.remove(temp_ang)
-    #os.remove(temp_db)
-    # compute error metrics
-    geh = mean_geh(flows_actual, flows_simulated)
-    rmse = mean_squared_error(speeds_actual, speeds_simulated, squared=False)
-    #print('Evaluation complete!')
-    return rmse, geh
-
-# register evaluation function
-toolbox.register("evaluate", eval)
-# register mating function
-toolbox.register("mate", tools.cxTwoPoint)
-# register mutation function
-#toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
-low = [0.8, 1.4, 0.01, 280, 100]  #lower bound for each gene
-up = [2, 2, 5, 420, 200]    #upper bound for each gene
-toolbox.register('mutate', tools.mutPolynomialBounded, eta=0.5, low=low, up=up, indpb=0.1)
-# register selection function
-toolbox.register("select", tools.selTournament, tournsize=3)
-
-# get number of threads/workers
-num_workers = 10 #mp.cpu_count()     #update
-toolbox.register("map", futures.map)
 
 def create_temporary_copy(src_file_name, preserve_extension=False):
     '''
@@ -285,6 +231,73 @@ def make_temp_sim():
     temp_db = create_temporary_copy(db_file, preserve_extension=True)
 
     return temp_ang, temp_db
+
+
+def simulate(individual, ang_file, db_file):
+    # convert individual to string so it can be passed as a command line argument
+    string_individual = [str(x) for x in individual]
+    run_aimsun_command(['evaluate', ang_file, str(rep_id), db_file] + string_individual)
+    # create dictionary of db tables
+    tables = to_dict(db_file)
+    # get new simulated results
+    sim_data = get_sim_data(tables)
+
+    # join sim and obs data
+    joined_data = join_obs_sim(obs_data, sim_data)
+
+    # get simulation flow and speed values
+    flows_simulated = joined_data['flow_sim']
+    speeds_simulated = joined_data['speed_sim']
+
+    return flows_simulated, speeds_simulated
+
+
+# Evaluation function
+
+#in AIMSUN help the formula is different: the RMSE is based on the percentage error: RMSE=sqrt( 1/N * sum[((sim-obs)/obs)**2] )
+def mean_squared_error(y_true, y_pred, squared=True):
+    MSE = np.square(np.divide(np.subtract(y_true,y_pred)/y_true)).mean() 
+    #print(y_true)
+    if squared:
+        return MSE
+    else:
+        return math.sqrt(MSE)
+
+def mean_geh(y_true, y_pred):
+    geh_vector = np.sqrt( (2*(y_pred - y_true)**2) / (y_true + y_pred) )
+    return np.mean(geh_vector)
+
+def eval(individual):
+    #print('Evaluating individual...')
+    # create a temporary copy of the ang file to evaluate in parallel
+    temp_ang, temp_db = make_temp_sim()
+    # run the simulation
+    flows_simulated, speeds_simulated = simulate(individual, temp_ang, temp_db)
+    # remove temporary files
+    os.remove(temp_ang)
+    os.remove(temp_db)
+    # compute error metrics
+    geh = mean_geh(flows_actual, flows_simulated)
+    rmse = mean_squared_error(speeds_actual, speeds_simulated, squared=False)
+    #print('Evaluation complete!')
+    return rmse, geh
+
+# register evaluation function
+toolbox.register("evaluate", eval)
+# register mating function
+toolbox.register("mate", tools.cxTwoPoint)
+# register mutation function
+#toolbox.register("mutate", tools.mutFlipBit, indpb=0.05)
+low = [0.8, 1.4, 0, 280, 100]  #lower bound for each gene
+up = [2, 2, 5, 420, 200]    #upper bound for each gene
+toolbox.register('mutate', tools.mutPolynomialBounded, eta=0.5, low=low, up=up, indpb=0.1)
+# register selection function
+toolbox.register("select", tools.selTournament, tournsize=3)
+
+# get number of threads/workers
+num_workers = 10 #mp.cpu_count()     #update
+toolbox.register("map", futures.map)
+
 
 # def uniform():                              #unnecessary function removed!
 #     return random.uniform(0, 20)
@@ -336,14 +349,14 @@ def get_finesses_max(indlist):                 #new fuction
 
 def main():
     # define cross and mutation probability constants
-    CXPB, MUTPB = 0.7, 0.1      #update
+    CXPB, MUTPB = 0.8, 0.1      #update
 
     # attribute generator - random float generator (start, end, decimal)                       #update
-    toolbox.register('attr_param1', random_generator, 0.8, 2, 2)    #reaction time
-    toolbox.register('attr_param2', random_generator, 1.4, 2, 2)    #reation at traffic light
-    toolbox.register('attr_param3', random_generator, 0.01, 5, 2)   #capacityWeight
-    toolbox.register('attr_param4', random_generator, 280, 420, 2)  #Look-Ahead Distance
-    toolbox.register('attr_param5', random_generator, 100, 200, 2)  #Jam Density
+    toolbox.register('attr_param1', random_generator, 0.8, 2, 1)    #reaction time
+    toolbox.register('attr_param2', random_generator, 1.4, 2, 1)    #reation at traffic light
+    toolbox.register('attr_param3', random.randint , 0, 5)   #capacityWeight
+    toolbox.register('attr_param4', random.randrange, 280, 420, 10)  #Look-Ahead Distance
+    toolbox.register('attr_param5', random.randint, 100, 200)  #Jam Density
     #
     # register individual function - 5 parameters
     toolbox.register('individual', tools.initCycle, creator.Individual, (toolbox.attr_param1, toolbox.attr_param2, toolbox.attr_param3, toolbox.attr_param4, toolbox.attr_param5), n=1)                  #update
@@ -352,7 +365,7 @@ def main():
     toolbox.register('population', tools.initRepeat, list, toolbox.individual)
 
     # init the population, size being equal to num of cpu cores ' num_workers '
-    pop = toolbox.population(n=10)                                                    #update
+    pop = toolbox.population(n=5)                                                    #update
     #
     # init hall of fame object, to hold the 10 best individuals
     hof = tools.HallOfFame(10)                                                        #update
@@ -374,8 +387,7 @@ def main():
     stats.register("individuals", get_individuals)
     #
     # Algorithm
-    pop, log = algorithms.eaSimple(pop, toolbox, cxpb=CXPB, mutpb=MUTPB, ngen=10,
-                                   stats=stats, halloffame=hof, verbose=True)
+    pop, log = algorithms.eaSimple(pop, toolbox, cxpb=CXPB, mutpb=MUTPB, ngen=3,stats=stats, halloffame=hof, verbose=True)
     return pop, log, hof
 
 

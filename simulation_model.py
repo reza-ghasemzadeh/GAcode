@@ -37,28 +37,28 @@ class CalibrationDataModel(object):
 				self._logger.error('cannot load network')
 				self._console = None
 				self._model = None
-
-		return (self._console, self._model)   #why it has paranthesis?
+		return (self._console, self._model)
 
 	def unloadNetwork(self):
 		# close Aimsun
 		if self._console is not None:
 			try:
 				self._logger.debug('Closing Aimsun')
+				self._console.save()
 				self._console.close()
-				self._model = self._console.getModel()     #why getting the model after closing?
+				self._model = None      #self._console.getModel()
 			except:
 				print('ERROR: cannot close AIMSUN')
 		else:
 			self._logger.error('No Aimsun instance is running')
-		return (self._console, self._model)     #why it has paranthesis?
+		return (self._console, self._model)
 
 	def _getExperiment(self):
 		replication = self._model.getCatalog().find(self._id)
-		return replication.getExperiment()    # is it right?
+		return replication.getExperiment()
 
 	def _getScenario(self):
-		return self._getExperiment().getScenario()  #is it right? it should not be "self.getScenario().getExperiment()"?
+		return self._getExperiment().getScenario()
 
 	def setDatabase(self, databaseName=None):
 		if self._console is None or self._model is None:
@@ -93,12 +93,12 @@ class CalibrationDataModel(object):
 		except OSError:
 			self._logger.debug('Cannot remove database: %s' % self._database)
 
-	def _setAttributes(self, object, attributes):  #the "object" won't be confused with the class object imputed at beginning?
+	def _setAttributes(self, obj, attributes):   #1st arg name changed
 		# attributes --> {att : val}
-		objType = object.getType()
-		for key in attributes: #OR: for key, value in attributes.items(): object.setDataValue(key, value)
+		objType = obj.getType()
+		for key in attributes:
 			att = objType.getColumn(key, GKType.eSearchOnlyThisType)
-			object.setDataValue(att, attributes[key])
+			obj.setDataValue(att, attributes[key])
 
 	def _setExperimentAttributes(self, attributes):
 		self._setAttributes(self._getExperiment(), attributes)
@@ -106,28 +106,37 @@ class CalibrationDataModel(object):
 	def setRoadAttributes(self, attributes):
 		# road's parameters
 		roadType = self._model.getType("GKRoadType")
-		roadTypes = self._model.getCatalog().getObjectsByType(roadType) #space in the empty paranthesis removed
+		roadTypes = self._model.getCatalog( ).getObjectsByType(roadType)
 		if roadTypes != None:
 			for roadType in roadTypes.values():
-				self._setAttributes(roadType, attributes) #it gets the type of the type of an object!!!
+				self._setAttributes(roadType, attributes)
 
-	def setTurnAttributes(self, attributes):
+	def setTurnAttributes(self, attributes):         #New Function
 		# turn's parameters
 		turnType = self._model.getType("GKTurning")
-		turnTypes = self._model.getCatalog().getObjectsByType(turnType) #space in the empty paranthesis removed
+		turnTypes = self._model.getCatalog( ).getObjectsByType(turnType)
 		if turnTypes != None:
 			for turnType in turnTypes.values():
-				self._setAttributes(turnType, attributes) #it gets the type of the type of an object!!!
+				GKTurning().setUseRoadTypeDistanceZones(False)  #New line
+				self._setAttributes(turnType, attributes)
 
-	def _getAttributes(self, object, attributes):
+	def setSectionAttributes(self, attributes):      #New Function
+		# section's parameters
+		sectionType = self._model.getType("GKSection")
+		sectionTypes = self._model.getCatalog( ).getObjectsByType(sectionType)
+		if sectionTypes != None:
+			for sectionType in sectionTypes.values():
+				self._setAttributes(sectionType, attributes)
+
+	def _getAttributes(self, obj, attributes):     #1st arg name changed
 		# attributes --> [att]
 		# result --> {att : val}
 		result = {}
-		objType = object.getType()
+		objType = obj.getType()
 		for key in attributes:
 			att = objType.getColumn(key, GKType.eSearchOnlyThisType)
-			if object.getDataValue(att)[1]:
-				result[key] = object.getDataValue(att)[0]  # index [0] is right? it should not be 1?
+			if obj.getDataValue(att)[1]:
+				result[key] = obj.getDataValue(att)[0]
 		return result
 
 	def run(self):
@@ -143,9 +152,9 @@ class CalibrationDataModel(object):
 				self._logger.error("Cannot find replication %i" % self._id)
 				return -1
 			else:
-				self.removeDatabase()
-				experiment = self._getExperiment()
-				scenario = self._getScenario()
+				#self.removeDatabase()
+				experiment = self._getExperiment()   #why we need this varialble?
+				scenario = self._getScenario()       #why we need this varialble?
 				# run the simulation
 				selection = []
 				self._logger.debug('Starting simulation %i' % self._id)
